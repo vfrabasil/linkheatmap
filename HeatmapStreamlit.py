@@ -44,6 +44,10 @@ def main():
                                         accept_multiple_files=False,
                                         type='csv', key = count)
 
+            if st.checkbox('Usar CSV de ejemplo'):
+                pre_file = 'rcard1104.csv'
+                post_file = 'rcard1105.csv'
+
     else:
         pre_file = 'rcard1104.csv'
         post_file = 'rcard1105.csv'
@@ -59,8 +63,8 @@ def main():
 
             if page == 'Analisis':
                 muestra = 30
-                if st.checkbox('Muestra:'):
-                    st.header('Muestra de los DataSet:')
+                if st.checkbox('Muestra de los archivos cargados:'):
+                    #st.header('Muestra de los DataSet:')
                     st.subheader("PRE implementacion:")
                     st.dataframe(dfOld.head(muestra))
                     st.subheader("POS implementacion:")
@@ -113,11 +117,17 @@ def txFiid(dfNew):
     #sns.set_style("darkgrid")
     #sns.set_context("talk", font_scale=0.5)
     #plt.figure(figsize=(10,16))
-    sns.scatterplot(df["card-fiid"], df["tran-cde"], data=df)
-    plt.xlabel("FIID")
-    plt.ylabel("Transaccion")
-    plt.title("Cantidad de tipo de transacciones por FIID")
-    st.pyplot(plt)
+
+    #sns.scatterplot(df["card-fiid"], df["tran-cde"], data=df)
+    #plt.xlabel("FIID")
+    #plt.ylabel("Transaccion")
+    #plt.title("Cantidad de tipo de transacciones por FIID")
+    #st.pyplot(plt)
+
+    fig3 = plt.figure()
+    g = sns.scatterplot(data=df, x=df["card-fiid"], y=df["tran-cde"] )
+    plt.xticks(rotation=45)
+    st.pyplot(fig3)
 
 
 # Convierto dos columnas (Codigo de transaccion y tipo-tran) en un diccionario:
@@ -155,6 +165,9 @@ def txCant(dfNew):
     plt.ylabel("Cantidad de transacciones")
     plt.title("Cantidad de transacciones por RESP-CDE (primeras 10)")
     st.pyplot(plt)
+
+
+    
 
 
 def genRatio(df, debug = False):
@@ -223,6 +236,7 @@ def generateHeatmap(dfRatios, heatTit):
         plt.tight_layout()
         plt.show()
     else:
+        #fig1 = plt.figure(figsize=(16,5))
         fig1 = plt.figure()
         ax = plt.axes()
         sns.heatmap(df, linewidths=.3, xticklabels=True, yticklabels=True, cmap='YlGnBu_r',
