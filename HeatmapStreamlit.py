@@ -1,12 +1,22 @@
+from typing import Optional
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import streamlit as st
+import base64
+
+from time import mktime
+from datetime import datetime
+
+
 #import plotly.express as px
 
 #Modo de Ejecucion:
 #streamlit run HeatmapStreamlit.py
+#
+#From Heroku
+#https://link-heatmap.herokuapp.com/
 
 # Global parameters
 pd.set_option('display.max_columns', 100)
@@ -89,7 +99,7 @@ def main():
                     
             else:
                 st.title('Prediccion')
-                st.text('TO DO')
+                runPred(dfNew)
 
         else:
             runTest(dfNew, dfOld)
@@ -269,6 +279,8 @@ def generateDifHeatmap(dfRatios, heatTit):
         g = sns.heatmap(dfRatios, linewidths=.5, xticklabels=True, yticklabels=True, cmap='coolwarm_r',
                         cbar_kws={'label': ' Disminucion X% ratio     |     Aumento X% ratio '}, ax = ax )
         ax.set_title(heatTit)
+        plt.xlabel("TranCode") 
+        plt.ylabel("TermTyp por FIID") 
         st.pyplot(fig2)
 
 
@@ -289,6 +301,8 @@ def generateHeatmapNeg(dfConcatNeg, heatTit):
         ax = plt.axes()
         sns.heatmap(dfConcatNeg, linewidths=.5, xticklabels=True, yticklabels=True, ax = ax)
         ax.set_title(heatTit)
+        plt.xlabel("TranCode") 
+        plt.ylabel("TermTyp por FIID") 
         st.pyplot(fig3)
         
         # g = sns.heatmap(dfConcatNeg)
@@ -309,26 +323,157 @@ def generateHeatmapNegReduc(dfConcatNeg, heatTit):
         plt.tight_layout()
         plt.show()
     else:
-        fig4 = plt.figure()
+        fig4 = plt.figure()   
         ax = plt.axes()
         sns.heatmap(dfConcatNeg, linewidths=.5, xticklabels=True, yticklabels=True, ax = ax)
         ax.set_title(heatTit)
+        plt.xlabel("TranCode") 
+        plt.ylabel("TermTyp por FIID") 
+
         st.pyplot(fig4)
+
+
+
+
+def runPred(dfNew):
+
+    with st.beta_expander("Seleccionar transaccion :", expanded=False):
+        optionTX = st.selectbox("", options=dfNew['tran-cde'].unique() )
+        if len(optionTX) > 0:
+            dfNew = dfNew.loc[dfNew['tran-cde'] == optionTX ]
+
+
+    df = dfNew[['tran-cde', 'date', 'time', 'amt']].copy()
+    compras = df.loc[df['tran-cde'] == optionTX]
+    st.write("Muestra:")
+    st.write(compras.head(15))
+    st.write(compras.shape)
+    
+
+    st.markdown('##')
+    st.markdown('____')
+    st.write("Agrupado por HH:MM :")
+    #compras = compras.groupby('time')['amt'].sum().reset_index()
+
+    radiosel = st.radio("Tipo de agregacion:", ["Minimo", "Maximo", "Promedio", "Suma", "Cantidad"] )
+    if radiosel == "Minimo":
+        compras = compras.groupby('time')['amt'].min().reset_index()
+    if radiosel == "Maximo":
+        compras = compras.groupby('time')['amt'].max().reset_index()
+    if radiosel == "Promedio":
+        compras = compras.groupby('time')['amt'].mean().reset_index()
+    if radiosel == "Suma":
+        compras = compras.groupby('time')['amt'].sum().reset_index()
+    if radiosel == "Cantidad":
+        compras = compras.groupby('time')['amt'].count().reset_index()
+
+    #st.write(compras.head(15))
+    
+
+    st.write("Conversion:")
+
+
+
+
+    #compras['time']= datetime.strptime(compras['time'], '%H:%M')
+    #compras['time'] = (pd.to_datetime(compras['time'].str.strip(), format='%H:%M'))
+    #compras['time'] = pd.to_datetime(compras['time'], format='%H:%M')
+    #st.write(df.dtypes)
+
+    #compras['time'] = compras['time'].astype(str)
+    #compras['time'] = pd.to_datetime(compras['time'].astype(str).apply('{:0>4}'.format)    , format='%H:%M')
+
+    #compras['time'] = datetime.strptime(pd.to_datetime(compras['time'].astype(str).apply('{:0>4}'.format), '%H:%M'))
+    compras['time'] = compras['time'].astype(str).apply('{:0>4}'.format)
+    f = lambda x:  x[:2] + ':' + x[2:]
+    compras['dtime'] = compras['time'].apply(f)  
+    #datetime.datetime.strptime(compras['time'], '%H:%M').time()
+    #compras['datetime'] = pd.to_timedelta(compras.time)
+
+    
+    #compras['dtime'] = pd.to_datetime(compras['dtime'], format='%H:%M').dt.time
+    #compras['dtime'] =  pd.to_datetime(compras['dtime'], format='%H:%M:%S', errors='coerce' )
+
+    #compras['dtime'] =  datetime.strptime(compras['dtime'], "%H:%M:%S").time()
+
+    #st.write(compras)
+    #st.write(compras.dtypes)
+
+    tsCompras = compras[['dtime','amt']]
+    #tsCompras.rename(columns={"dtime": "ds", "amt": "y"}, errors="raise", inplace=True)
+    tsCompras = tsCompras.set_index('dtime')
+    #tsCompras.index
+
+
+    st.write(tsCompras)
+    st.write(tsCompras.shape)
+    
+
+    #tsCompras = tsCompras['dtime'].resample('30T').mean()
+    
+
+
+    tsCompras.plot(kind = "bar")
+    st.pyplot(plt)
+
+    st.line_chart(tsCompras['amt'])
+
+    #y = compras['amt'].resample('3T').mean()
+    #st.write(print("y"))
+
+
+def download_csv(name, df):
+    #csv = df.to_csv(index=False)
+    csv = df.to_csv()
+    base = base64.b64encode(csv.encode()).decode()
+    file = (f'<a href="data:file/csv;base64,{base}" download="%s.csv">Download file</a>' % (name))
+    return file
+
 
 
 def runTest(dfNew, dfOld):
 
+
+    with st.beta_expander("Reducir Matriz :", expanded=False):
+        optionFIID = st.multiselect("Por FIID", dfNew['term-fiid'].unique() )
+        optionTERM = st.multiselect("Por TERM-TYPE", options=dfNew['term-typ'].unique() )
+        optionTX = st.multiselect("Por TRANSACCION", options=dfNew['tran-cde'].unique() )
+        st.write(f"Opcion seleccionada: FIID:{optionFIID}, TERM:{optionTERM}, TRANSACTION:{optionTX}  ")
+
+        if len(optionFIID) > 0:
+            dfOld = dfOld.loc[dfOld['term-fiid'].isin(optionFIID) ]
+            dfNew = dfNew.loc[dfNew['term-fiid'].isin(optionFIID) ]
+        if len(optionTERM) > 0:
+            dfOld = dfOld.loc[dfOld['term-typ'].isin(optionTERM) ]
+            dfNew = dfNew.loc[dfNew['term-typ'].isin(optionTERM) ]
+        if len(optionTX) > 0:
+            dfOld = dfOld.loc[dfOld['tran-cde'].isin(optionTX) ]
+            dfNew = dfNew.loc[dfNew['tran-cde'].isin(optionTX) ]
+    st.markdown('##')
+    st.markdown('____')
+
+
     dfHeatOld = genRatio(dfOld, False)
     dfHeatOld = genRatioMatrix(dfHeatOld, False)
     generateHeatmap(dfHeatOld, "Ratio aprobacion (aprob/total) PRE-Imple")
+    st.markdown(download_csv('Data Frame PREVIO',dfHeatOld),unsafe_allow_html=True)
+    st.markdown('##')
+    st.markdown('____')
 
     dfHeatNew = genRatio(dfNew, False)
     dfHeatNew = genRatioMatrix(dfHeatNew, False)
     generateHeatmap(dfHeatNew, "Ratio aprobacion (aprob/total) POS-Imple")
+    st.markdown(download_csv('Data Frame POSTERIOR',dfHeatNew),unsafe_allow_html=True)
+    st.markdown('##')
+    st.markdown('____')
+
 
     dfConcat = dfHeatNew.append((dfHeatOld*(-1)), sort=False)
     dfConcat = dfConcat.groupby(dfConcat.index).sum()
     generateDifHeatmap(dfConcat, "Variacion en ratios de aprobacion (TermTyp vs TranCde)")
+    st.markdown(download_csv('Data Frame VARIACION',dfConcat),unsafe_allow_html=True)
+    st.markdown('##')
+    st.markdown('____')
 
     # Para este analisis elimino todos los valores positivos
     # ya que solo me interesa ver que transacciones disminuyeron en aprobaciones:
@@ -336,7 +481,9 @@ def runTest(dfNew, dfOld):
     dfConcatNeg = dfConcat.copy()
     dfConcatNeg = dfConcatNeg.applymap(f)
     generateHeatmapNeg(dfConcatNeg, "Variacion NEGATIVA en ratios de aprobacion")
-
+    st.markdown(download_csv('Data Frame VARIACION NEG',dfConcatNeg),unsafe_allow_html=True)
+    st.markdown('##')
+    st.markdown('____')
 
     # Reduzco la matriz eliminando valores muy bajos de variacion
     # Hay una variacion de +/-X% en los ratios de aprobacion que es aceptable y no interesa analizar 
