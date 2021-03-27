@@ -2,9 +2,12 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import plotly.express as px
+import plotly.graph_objects as go
 import seaborn as sns
 import streamlit as st
 import base64
+import math
 
 from time import mktime
 from datetime import datetime
@@ -13,7 +16,7 @@ from datetime import datetime
 #import plotly.express as px
 
 #Modo de Ejecucion:
-#streamlit run HeatmapStreamlit.py
+#streamlit run HeatmapStreamlit.py --server.maxUploadSize=1028
 #
 #From Heroku
 #https://link-heatmap.herokuapp.com/
@@ -26,13 +29,13 @@ stlit = True
 
 
 # Setting Cache for dataset:
-@st.cache
+@st.cache(allow_output_mutation=True)
 def load_dataset(pre_file ,post_file):
     #dfOld = pd.read_csv('rcardOld.csv', sep=';')
     #dfNew = pd.read_csv('rcardNew.csv', sep=';')
 
-    dfOld = pd.read_csv(pre_file, sep=';')
-    dfNew = pd.read_csv(post_file, sep=';')
+    dfOld = pd.read_csv(pre_file, sep=';', dtype={"term-fiid": str, "term-typ": str, "card-fiid": str, "resp-cde": str}, low_memory=False)
+    dfNew = pd.read_csv(post_file, sep=';', dtype={"term-fiid": str, "term-typ": str, "card-fiid": str, "resp-cde": str}, low_memory=False)
     return dfOld, dfNew
 
 
@@ -43,7 +46,7 @@ def main():
     count = 1
 
     if stlit == True:
-        st.title("Seleccionar Dataframes:")
+        st.title("1 - Seleccionar Dataframes:")
 
         with st.beta_expander("Cargar Archivos CSV :", expanded=True):
             pre_file  = st.file_uploader("Seleccion PRE implementacion:", 
@@ -68,37 +71,45 @@ def main():
     if pre_file is not None and post_file is not None:
         dfOld, dfNew = load_dataset(pre_file, post_file )
 
+        #Simplificar el dataset
+        #dfOld.drop(dfOld.columns.difference(['term-fiid', 'term-typ', 'card-fiid', 'tran-cde', 'resp-cde']), 1, inplace=True)
+        #dfNew.drop(dfNew.columns.difference(['term-fiid', 'term-typ', 'card-fiid', 'tran-cde', 'resp-cde']), 1, inplace=True)
+ 
         if stlit == True:
-            page = st.sidebar.selectbox("Seleccionar opcion", ['Analisis', 'Exploracion', 'Prediccion'])
+            page = st.sidebar.selectbox("Seleccionar opcion", ['Exploracion', 'Analisis', 'Prediccion'])
 
+            st.markdown('##')
             if page == 'Analisis':
+
                 muestra = 30
                 if st.checkbox('Muestra de los archivos cargados:'):
-                    #st.header('Muestra de los DataSet:')
                     st.subheader("PRE implementacion:")
                     st.dataframe(dfOld.head(muestra))
                     st.subheader("POS implementacion:")
                     st.dataframe(dfNew.head(muestra))
-                st.title('Analisis por mapa de calor')
+                st.title('2 - Analisis por mapa de calor')
                 runTest(dfNew, dfOld)
 
             elif page == 'Exploracion':
-                st.title('Datos exploratorios del Data-set: {}'.format("Post Implementacion"))
+                st.title('2 - Datos exploratorios del Data-set: {}'.format("Post Implementacion"))
                 if st.checkbox('Descripcion:'):
                     st.dataframe(dfNew.describe())
-                if st.checkbox("Por Cantidad de transacciones:"):
+                    st.dataframe(dfNew.describe(include=[object]))
+
+                if st.checkbox("Cantidad de operaciones por Transaccion (tran-cde):"):
                     txCant(dfNew)
-                if st.checkbox("Por tipo de terminal:"):
+                if st.checkbox("Cantidad de operaciones por Terminal (term-cde):"):
                     txTerm(dfNew)
-                if st.checkbox("Tipo-tran por transaccion:"):
+                if st.checkbox("Tipo-tran por Transaccion:"):
                     txTipoTran(dfNew)
-                if st.checkbox("Tran-cde por FIID:"):
+                if st.checkbox("Transacciones (tran-cde) por FIID:"):
                     txFiid(dfNew)
-                if st.checkbox("Transacciones por FIID/Tran-cde:"):
-                    txFiidTran(dfNew)
+                if st.checkbox("Volumen de transacciones por FIID:"):
+                    txVolFiid(dfNew)
+
                     
             else:
-                st.title('Prediccion')
+                st.title('2 - Prediccion')
                 runPred(dfNew)
 
         else:
@@ -107,37 +118,130 @@ def main():
 
 
 
-# Cantidad de transacciones por Fiid + trancde:
-def txFiidTran(dfNew):
+def txVolCardFiid(dfNew):
+
     df = dfNew[['card-fiid', 'tran-cde']].copy()
     df['cantTx']=1
     grouping_columns = ['card-fiid', 'tran-cde']
     columns_to_show = ['cantTx']
     df = df.groupby(by=grouping_columns)[columns_to_show].sum().reset_index()
+
+    # Para mostrar en listado, ordeno por cantidad de transacciones:
     st.write(df.sort_values(['card-fiid', "cantTx"], ascending=[True,False]))
     
+    # Para mostrar grafico, ordeno por tran-cde:
+    df.sort_values(["card-fiid"], inplace=True)
+    df.sort_values(["tran-cde"], inplace=True)
 
+    xx = df['card-fiid'].nunique()
+    yy = df['tran-cde'].nunique()
+
+    st.write(f'Cantidad de items X:{xx} Y:{yy}')
+    fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
+
+    fig, ax = plt.subplots(figsize=fig_dims)
+    plt.xticks(rotation=90)
+    sns.scatterplot(data=df, x="card-fiid", y="tran-cde", ax=ax, size="cantTx", sizes=(5, 600), alpha=.8, palette="muted")
+    st.write(fig)
+
+    # OK: otra opcion:
+    #fig3 = plt.figure()
+    #g = sns.scatterplot(data=df, x="card-fiid", y="tran-cde", size="cantTx", sizes=(5, 300), alpha=.5, palette="muted")
+    #plt.xticks(rotation=45)
+    #st.pyplot(fig3)
+
+
+def txVolTermFiid(dfNew):
+
+    df = dfNew[['term-fiid', 'tran-cde']].copy()
+    df['cantTx']=1
+    grouping_columns = ['term-fiid', 'tran-cde']
+    columns_to_show = ['cantTx']
+    df = df.groupby(by=grouping_columns)[columns_to_show].sum().reset_index()
+
+    # Para mostrar en listado, ordeno por cantidad de transacciones:
+    st.write(df.sort_values(['term-fiid', "cantTx"], ascending=[True,False]))
+    
+    # Para mostrar grafico, ordeno por tran-cde:
+    df.sort_values(["term-fiid"], inplace=True)
+    df.sort_values(["tran-cde"], inplace=True)
+
+    xx = df['term-fiid'].nunique()
+    yy = df['tran-cde'].nunique()
+
+
+    st.write(f'Cantidad de items X:{xx} Y:{yy}')
+    fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
+
+    fig, ax = plt.subplots(figsize=fig_dims)
+    plt.xticks(rotation=90)
+
+    #sns.set_palette('rainbow')
+    sns.scatterplot(data=df, x="term-fiid", y="tran-cde", ax=ax, size="cantTx", sizes=(10, 500), legend="brief", alpha=.8)
+    st.write(fig)
+
+    # OK: otra opcion:
+    #fig3 = plt.figure()
+    #g = sns.scatterplot(data=df, x="term-fiid", y="tran-cde", size="cantTx", sizes=(5, 300), alpha=.5, palette="muted")
+    #plt.xticks(rotation=45)
+    #st.pyplot(fig3)
+
+
+# Cantidad de transacciones por Fiid + trancde:
+def txVolFiid(dfNew):
+
+    radioselv = st.radio("Seleccion FIID:", ["term-fiid", "card-fiid"] , key = 10)
+    if radioselv == "term-fiid":
+        txVolTermFiid(dfNew)
+    if radioselv == "card-fiid":
+        txVolCardFiid(dfNew)   
+
+
+def txTermFiid(dfNew):
+    df = dfNew[["term-fiid", "tran-cde"]].copy()
+    df.sort_values(["term-fiid"], inplace=True)
+    df.sort_values(["tran-cde"], inplace=True)
+
+    st.write(df['term-fiid'].value_counts().to_frame())
+    xx = df['term-fiid'].nunique()
+    yy = df['tran-cde'].nunique()
+
+    st.write(f'Cantidad de items X:{xx} Y:{yy}')
+
+    fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
+    fig, ax = plt.subplots(figsize=fig_dims)
+    ax.grid(linestyle=':')
+    plt.xticks(rotation=45)
+    sns.scatterplot(data=df, x="term-fiid", y="tran-cde", ax=ax)
+    st.write(fig)
+
+def txCardFiid(dfNew):
+    df = dfNew[["card-fiid", "tran-cde"]].copy()
+    df.sort_values(["card-fiid"], inplace=True)
+    df.sort_values(["tran-cde"], inplace=True)
+
+    st.write(df['card-fiid'].value_counts().to_frame())
+    xx = df['card-fiid'].nunique()
+    yy = df['tran-cde'].nunique()
+
+    st.write(f'Cantidad de items X:{xx} Y:{yy}')
+
+    fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
+    fig, ax = plt.subplots(figsize=fig_dims)
+    ax.grid(linestyle=':')
+    plt.xticks(rotation=45)
+    sns.scatterplot(data=df, x="card-fiid", y="tran-cde", ax=ax)
+    st.write(fig)
 
 
 # Transacciones utilizadas por cada FIID"
 def txFiid(dfNew):
-    df = dfNew.copy()
-    df.sort_values(["card-fiid"], inplace=True)
-    df.sort_values(["tran-cde"], inplace=True)
-    #sns.set_style("darkgrid")
-    #sns.set_context("talk", font_scale=0.5)
-    #plt.figure(figsize=(10,16))
 
-    #sns.scatterplot(df["card-fiid"], df["tran-cde"], data=df)
-    #plt.xlabel("FIID")
-    #plt.ylabel("Transaccion")
-    #plt.title("Cantidad de tipo de transacciones por FIID")
-    #st.pyplot(plt)
-
-    fig3 = plt.figure()
-    g = sns.scatterplot(data=df, x=df["card-fiid"], y=df["tran-cde"] )
-    plt.xticks(rotation=45)
-    st.pyplot(fig3)
+    radiosel = st.radio("Seleccion FIID:", ["term-fiid", "card-fiid"], key = 11 )
+    if radiosel == "term-fiid":
+        txTermFiid(dfNew)
+    if radiosel == "card-fiid":
+        txCardFiid(dfNew)
 
 
 # Convierto dos columnas (Codigo de transaccion y tipo-tran) en un diccionario:
@@ -145,7 +249,11 @@ def txFiid(dfNew):
 def txTipoTran(dfNew):
     df = dfNew.copy()
     st.write("Tipo tran por transaccion:")
-    st.write(df.groupby(by='tran-cde')['tipo-tran'].unique().apply(lambda x:x.tolist()).to_dict() )
+    dic = df.groupby(by='tran-cde')['tipo-tran'].unique().apply(lambda x:x.tolist()).to_dict() 
+
+
+    for tc, tt in dic.items():
+        st.markdown(f'__{tc}__: {tt}')
 
 
 # Cantidad de transacciones por tipo de terminal:
@@ -171,23 +279,23 @@ def txCant(dfNew):
     st.write(counts.tail(10))
 
     counts.head(10).plot(kind = "bar")
-    plt.xlabel("Codigos de Respuesta")
-    plt.ylabel("Cantidad de transacciones")
-    plt.title("Cantidad de transacciones por RESP-CDE (primeras 10)")
+    plt.xlabel("tran-cde")
+    plt.ylabel("Cantidad de operaciones")
+    plt.title("Cantidad de operaciones por transaccion (primeras 10)")
     st.pyplot(plt)
 
 
     
 
 
-def genRatio(df, debug = False):
+def genRatio(dfRatio, debug = False):
     """ Generar un nuevo DF reducido con la columna de ratios de aprobacion: """
 
-    dfRatio = df[['term-fiid', 'term-typ', 'tran-cde', 'resp-cde']]
+    #dfRatio = df[['term-fiid', 'term-typ', 'tran-cde', 'resp-cde']]
 
     #print("agrego columna con resultado: OK para aprobado, NO para rechazo")
-    #dfHeat["resultado"] = dfHeat["resp-cde"].apply(lambda x: 'ok' if (x == '000' or x == '001') else 'no')
-    dfRatio["resultado"] = dfRatio["resp-cde"].apply(lambda x: 'ok' if (x == 0 or x == 1) else 'no')
+    #dfRatio["resultado"] = dfRatio["resp-cde"].apply(lambda x: 'ok' if (x == 0 or x == 1) else 'no')
+    dfRatio["resultado"] = dfRatio["resp-cde"].apply(lambda x: 'ok' if (x == '000' or x == '001') else 'no')
 
     #Agrego una columna para contabilizar aprobadas vs rechazadas:
     dfRatio['counter'] =1
@@ -237,6 +345,8 @@ def generateHeatmap(dfRatios, heatTit):
         plt.pcolor(df)
         plt.yticks(np.arange(0.5, len(df.index), 1), df.index)
         plt.xticks(np.arange(0.5, len(df.columns), 1), df.columns)
+
+       
         g = sns.heatmap(df, linewidths=.3, xticklabels=True, yticklabels=True, cmap='YlGnBu_r',
                             cbar_kws={'label': ' sin datos ( < 0)     |     %Aprob ( >= 0) '} )
         g.set_xticklabels(g.get_xticklabels(), rotation=90, fontsize=3)
@@ -249,6 +359,14 @@ def generateHeatmap(dfRatios, heatTit):
         #fig1 = plt.figure(figsize=(16,5))
         fig1 = plt.figure()
         ax = plt.axes()
+
+        xx = len(df.columns)
+        yy = len(df)
+        st.write(f'Cantidad de items X:{xx} Y:{yy}')
+        fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
+        fig1, ax = plt.subplots(figsize=fig_dims)
+
+
         sns.heatmap(df, linewidths=.3, xticklabels=True, yticklabels=True, cmap='YlGnBu_r',
                     cbar_kws={'label': ' sin datos ( < 0)     |     %Aprob ( >= 0) '}, ax = ax )
         ax.set_title(heatTit)
@@ -276,6 +394,14 @@ def generateDifHeatmap(dfRatios, heatTit):
     else:
         fig2 = plt.figure()
         ax = plt.axes()
+
+        xx = len(dfRatios.columns)
+        yy = len(dfRatios)
+        st.write(f'Cantidad de items X:{xx} Y:{yy}')
+        fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
+        fig2, ax = plt.subplots(figsize=fig_dims)
+
+
         g = sns.heatmap(dfRatios, linewidths=.5, xticklabels=True, yticklabels=True, cmap='coolwarm_r',
                         cbar_kws={'label': ' Disminucion X% ratio     |     Aumento X% ratio '}, ax = ax )
         ax.set_title(heatTit)
@@ -299,6 +425,15 @@ def generateHeatmapNeg(dfConcatNeg, heatTit):
     else:
         fig3 = plt.figure()
         ax = plt.axes()
+
+
+        xx = len(dfConcatNeg.columns)
+        yy = len(dfConcatNeg)
+        st.write(f'Cantidad de items X:{xx} Y:{yy}')
+        fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
+        fig3, ax = plt.subplots(figsize=fig_dims)
+
+
         sns.heatmap(dfConcatNeg, linewidths=.5, xticklabels=True, yticklabels=True, ax = ax)
         ax.set_title(heatTit)
         plt.xlabel("TranCode") 
@@ -325,6 +460,14 @@ def generateHeatmapNegReduc(dfConcatNeg, heatTit):
     else:
         fig4 = plt.figure()   
         ax = plt.axes()
+
+        xx = len(dfConcatNeg.columns)
+        yy = len(dfConcatNeg)
+        st.write(f'Cantidad de items X:{xx} Y:{yy}')
+        fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
+        fig4, ax = plt.subplots(figsize=fig_dims)
+
+
         sns.heatmap(dfConcatNeg, linewidths=.5, xticklabels=True, yticklabels=True, ax = ax)
         ax.set_title(heatTit)
         plt.xlabel("TranCode") 
@@ -337,6 +480,8 @@ def generateHeatmapNegReduc(dfConcatNeg, heatTit):
 
 def runPred(dfNew):
 
+    st.write(dfNew.sample(10))
+
     with st.beta_expander("Seleccionar transaccion :", expanded=False):
         optionTX = st.selectbox("", options=dfNew['tran-cde'].unique() )
         if len(optionTX) > 0:
@@ -345,7 +490,7 @@ def runPred(dfNew):
 
     df = dfNew[['tran-cde', 'date', 'time', 'amt']].copy()
     compras = df.loc[df['tran-cde'] == optionTX]
-    st.write("Muestra:")
+    st.write("Muestra: Transaccion {}".format(optionTX))
     st.write(compras.head(15))
     st.write(compras.shape)
     
@@ -368,58 +513,29 @@ def runPred(dfNew):
         compras = compras.groupby('time')['amt'].count().reset_index()
 
     #st.write(compras.head(15))
-    
-
     st.write("Conversion:")
 
-
-
-
-    #compras['time']= datetime.strptime(compras['time'], '%H:%M')
-    #compras['time'] = (pd.to_datetime(compras['time'].str.strip(), format='%H:%M'))
-    #compras['time'] = pd.to_datetime(compras['time'], format='%H:%M')
-    #st.write(df.dtypes)
-
-    #compras['time'] = compras['time'].astype(str)
-    #compras['time'] = pd.to_datetime(compras['time'].astype(str).apply('{:0>4}'.format)    , format='%H:%M')
-
-    #compras['time'] = datetime.strptime(pd.to_datetime(compras['time'].astype(str).apply('{:0>4}'.format), '%H:%M'))
     compras['time'] = compras['time'].astype(str).apply('{:0>4}'.format)
     f = lambda x:  x[:2] + ':' + x[2:]
     compras['dtime'] = compras['time'].apply(f)  
-    #datetime.datetime.strptime(compras['time'], '%H:%M').time()
-    #compras['datetime'] = pd.to_timedelta(compras.time)
-
-    
-    #compras['dtime'] = pd.to_datetime(compras['dtime'], format='%H:%M').dt.time
-    #compras['dtime'] =  pd.to_datetime(compras['dtime'], format='%H:%M:%S', errors='coerce' )
-
-    #compras['dtime'] =  datetime.strptime(compras['dtime'], "%H:%M:%S").time()
-
-    #st.write(compras)
-    #st.write(compras.dtypes)
 
     tsCompras = compras[['dtime','amt']]
-    #tsCompras.rename(columns={"dtime": "ds", "amt": "y"}, errors="raise", inplace=True)
     tsCompras = tsCompras.set_index('dtime')
-    #tsCompras.index
 
 
-    st.write(tsCompras)
-    st.write(tsCompras.shape)
-    
 
-    #tsCompras = tsCompras['dtime'].resample('30T').mean()
-    
+    column_1, column_2 = st.beta_columns(2)
 
+    with column_1:
+        st.write(tsCompras)
+        st.write(tsCompras.shape)
 
-    tsCompras.plot(kind = "bar")
-    st.pyplot(plt)
+    with column_2:
+        tsCompras.plot(kind = "bar")
+        st.pyplot(plt)
 
+    st.markdown('##')
     st.line_chart(tsCompras['amt'])
-
-    #y = compras['amt'].resample('3T').mean()
-    #st.write(print("y"))
 
 
 def download_csv(name, df):
@@ -455,6 +571,7 @@ def runTest(dfNew, dfOld):
 
     dfHeatOld = genRatio(dfOld, False)
     dfHeatOld = genRatioMatrix(dfHeatOld, False)
+    dfHeatOld = dfHeatOld.T
     generateHeatmap(dfHeatOld, "Ratio aprobacion (aprob/total) PRE-Imple")
     st.markdown(download_csv('Data Frame PREVIO',dfHeatOld),unsafe_allow_html=True)
     st.markdown('##')
@@ -462,6 +579,7 @@ def runTest(dfNew, dfOld):
 
     dfHeatNew = genRatio(dfNew, False)
     dfHeatNew = genRatioMatrix(dfHeatNew, False)
+    dfHeatNew = dfHeatNew.T
     generateHeatmap(dfHeatNew, "Ratio aprobacion (aprob/total) POS-Imple")
     st.markdown(download_csv('Data Frame POSTERIOR',dfHeatNew),unsafe_allow_html=True)
     st.markdown('##')
@@ -491,9 +609,9 @@ def runTest(dfNew, dfOld):
     # A esa variable la denomino threshold:
     f = lambda x:  float("NaN") if x > threshold else x
 
-    threshold = -15
+    threshold = -10
     if stlit == False:
-        threshold = -15
+        threshold = -10
     else:
         #st.text('Reduzco la matriz eliminando valores muy bajos de variacion:')
         optionals = st.beta_expander("Reduccion de matriz:", True)
@@ -506,11 +624,11 @@ def runTest(dfNew, dfOld):
 
 
 
-    print("Tamaño original: {}".format(dfConcatNeg.shape ) )
+    #print("Tamaño original: {}".format(dfConcatNeg.shape ) )
     dfConcatNeg = dfConcatNeg.applymap(f)
     dfConcatNeg = dfConcatNeg.dropna(how='all')
     dfConcatNeg = dfConcatNeg.dropna(axis=1, how='all')
-    print("Tamaño despues de aplicar el umbral: {}".format(dfConcatNeg.shape ) )
+    #print("Tamaño despues de aplicar el umbral: {}".format(dfConcatNeg.shape ) )
 
     generateHeatmapNegReduc(dfConcatNeg, 'Variacion ( superior a {}% ) en ratios de aprobacion'.format(threshold) )
 
