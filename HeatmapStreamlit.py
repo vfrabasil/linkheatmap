@@ -80,6 +80,11 @@ def main():
 
             st.markdown('##')
             if page == 'Analisis':
+                st.title('2 - Analisis por mapa de calor')
+                runTest(dfNew, dfOld)
+
+            elif page == 'Exploracion':
+                st.title('2 - Datos exploratorios del Data-set: {}'.format("Post Implementacion"))
 
                 muestra = 30
                 if st.checkbox('Muestra de los archivos cargados:'):
@@ -87,25 +92,26 @@ def main():
                     st.dataframe(dfOld.head(muestra))
                     st.subheader("POS implementacion:")
                     st.dataframe(dfNew.head(muestra))
-                st.title('2 - Analisis por mapa de calor')
-                runTest(dfNew, dfOld)
-
-            elif page == 'Exploracion':
-                st.title('2 - Datos exploratorios del Data-set: {}'.format("Post Implementacion"))
+                    st.markdown('##')
                 if st.checkbox('Descripcion:'):
                     st.dataframe(dfNew.describe())
                     st.dataframe(dfNew.describe(include=[object]))
-
+                    st.markdown('##')
                 if st.checkbox("Cantidad de operaciones por Transaccion (tran-cde):"):
                     txCant(dfNew)
+                    st.markdown('##')
                 if st.checkbox("Cantidad de operaciones por Terminal (term-cde):"):
                     txTerm(dfNew)
+                    st.markdown('##')
                 if st.checkbox("Tipo-tran por Transaccion:"):
                     txTipoTran(dfNew)
+                    st.markdown('##')
                 if st.checkbox("Transacciones (tran-cde) por FIID:"):
                     txFiid(dfNew)
+                    st.markdown('##')
                 if st.checkbox("Volumen de transacciones por FIID:"):
                     txVolFiid(dfNew)
+                    st.markdown('##')
 
                     
             else:
@@ -133,16 +139,16 @@ def txVolCardFiid(dfNew):
     df.sort_values(["card-fiid"], inplace=True)
     df.sort_values(["tran-cde"], inplace=True)
 
+    # Dimensionamiento automatico de la matriz
     xx = df['card-fiid'].nunique()
     yy = df['tran-cde'].nunique()
-
-    st.write(f'Cantidad de items X:{xx} Y:{yy}')
     fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
 
     fig, ax = plt.subplots(figsize=fig_dims)
     plt.xticks(rotation=90)
     sns.scatterplot(data=df, x="card-fiid", y="tran-cde", ax=ax, size="cantTx", sizes=(5, 600), alpha=.8, palette="muted")
     st.write(fig)
+    st.write(f'Tamaño matriz X:{xx} Y:{yy}')
 
     # OK: otra opcion:
     #fig3 = plt.figure()
@@ -168,17 +174,14 @@ def txVolTermFiid(dfNew):
 
     xx = df['term-fiid'].nunique()
     yy = df['tran-cde'].nunique()
-
-
-    st.write(f'Cantidad de items X:{xx} Y:{yy}')
     fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
-
     fig, ax = plt.subplots(figsize=fig_dims)
     plt.xticks(rotation=90)
 
     #sns.set_palette('rainbow')
     sns.scatterplot(data=df, x="term-fiid", y="tran-cde", ax=ax, size="cantTx", sizes=(10, 500), legend="brief", alpha=.8)
     st.write(fig)
+    st.write(f'Tamaño matriz X:{xx} Y:{yy}')
 
     # OK: otra opcion:
     #fig3 = plt.figure()
@@ -205,15 +208,13 @@ def txTermFiid(dfNew):
     st.write(df['term-fiid'].value_counts().to_frame())
     xx = df['term-fiid'].nunique()
     yy = df['tran-cde'].nunique()
-
-    st.write(f'Cantidad de items X:{xx} Y:{yy}')
-
     fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
     fig, ax = plt.subplots(figsize=fig_dims)
     ax.grid(linestyle=':')
     plt.xticks(rotation=45)
     sns.scatterplot(data=df, x="term-fiid", y="tran-cde", ax=ax)
     st.write(fig)
+    st.write(f'Tamaño matriz X:{xx} Y:{yy}')
 
 def txCardFiid(dfNew):
     df = dfNew[["card-fiid", "tran-cde"]].copy()
@@ -223,15 +224,14 @@ def txCardFiid(dfNew):
     st.write(df['card-fiid'].value_counts().to_frame())
     xx = df['card-fiid'].nunique()
     yy = df['tran-cde'].nunique()
-
-    st.write(f'Cantidad de items X:{xx} Y:{yy}')
-
     fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
+
     fig, ax = plt.subplots(figsize=fig_dims)
     ax.grid(linestyle=':')
     plt.xticks(rotation=45)
     sns.scatterplot(data=df, x="card-fiid", y="tran-cde", ax=ax)
     st.write(fig)
+    st.write(f'Tamaño matriz X:{xx} Y:{yy}')
 
 
 # Transacciones utilizadas por cada FIID"
@@ -362,15 +362,14 @@ def generateHeatmap(dfRatios, heatTit):
 
         xx = len(df.columns)
         yy = len(df)
-        st.write(f'Cantidad de items X:{xx} Y:{yy}')
         fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
         fig1, ax = plt.subplots(figsize=fig_dims)
-
 
         sns.heatmap(df, linewidths=.3, xticklabels=True, yticklabels=True, cmap='YlGnBu_r',
                     cbar_kws={'label': ' sin datos ( < 0)     |     %Aprob ( >= 0) '}, ax = ax )
         ax.set_title(heatTit)
         st.pyplot(fig1)
+        st.write(f'Tamaño matriz X:{xx} Y:{yy}')
 
 
 
@@ -397,10 +396,8 @@ def generateDifHeatmap(dfRatios, heatTit):
 
         xx = len(dfRatios.columns)
         yy = len(dfRatios)
-        st.write(f'Cantidad de items X:{xx} Y:{yy}')
         fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
         fig2, ax = plt.subplots(figsize=fig_dims)
-
 
         g = sns.heatmap(dfRatios, linewidths=.5, xticklabels=True, yticklabels=True, cmap='coolwarm_r',
                         cbar_kws={'label': ' Disminucion X% ratio     |     Aumento X% ratio '}, ax = ax )
@@ -408,7 +405,7 @@ def generateDifHeatmap(dfRatios, heatTit):
         plt.xlabel("TranCode") 
         plt.ylabel("TermTyp por FIID") 
         st.pyplot(fig2)
-
+        st.write(f'Tamaño matriz X:{xx} Y:{yy}')
 
 def generateHeatmapNeg(dfConcatNeg, heatTit):
     """ HEATMAP por variacion negativa: """
@@ -429,16 +426,15 @@ def generateHeatmapNeg(dfConcatNeg, heatTit):
 
         xx = len(dfConcatNeg.columns)
         yy = len(dfConcatNeg)
-        st.write(f'Cantidad de items X:{xx} Y:{yy}')
         fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
         fig3, ax = plt.subplots(figsize=fig_dims)
-
 
         sns.heatmap(dfConcatNeg, linewidths=.5, xticklabels=True, yticklabels=True, ax = ax)
         ax.set_title(heatTit)
         plt.xlabel("TranCode") 
         plt.ylabel("TermTyp por FIID") 
         st.pyplot(fig3)
+        st.write(f'Tamaño matriz X:{xx} Y:{yy}')
         
         # g = sns.heatmap(dfConcatNeg)
         # g.set_title(heatTit)
@@ -463,10 +459,8 @@ def generateHeatmapNegReduc(dfConcatNeg, heatTit):
 
         xx = len(dfConcatNeg.columns)
         yy = len(dfConcatNeg)
-        st.write(f'Cantidad de items X:{xx} Y:{yy}')
         fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
         fig4, ax = plt.subplots(figsize=fig_dims)
-
 
         sns.heatmap(dfConcatNeg, linewidths=.5, xticklabels=True, yticklabels=True, ax = ax)
         ax.set_title(heatTit)
@@ -474,13 +468,12 @@ def generateHeatmapNegReduc(dfConcatNeg, heatTit):
         plt.ylabel("TermTyp por FIID") 
 
         st.pyplot(fig4)
+        st.write(f'Tamaño matriz X:{xx} Y:{yy}')
 
 
 
 
 def runPred(dfNew):
-
-    st.write(dfNew.sample(10))
 
     with st.beta_expander("Seleccionar transaccion :", expanded=False):
         optionTX = st.selectbox("", options=dfNew['tran-cde'].unique() )
@@ -490,6 +483,8 @@ def runPred(dfNew):
 
     df = dfNew[['tran-cde', 'date', 'time', 'amt']].copy()
     compras = df.loc[df['tran-cde'] == optionTX]
+    st.markdown('##')
+    st.markdown('##')
     st.write("Muestra: Transaccion {}".format(optionTX))
     st.write(compras.head(15))
     st.write(compras.shape)
@@ -513,6 +508,7 @@ def runPred(dfNew):
         compras = compras.groupby('time')['amt'].count().reset_index()
 
     #st.write(compras.head(15))
+    st.markdown('##')
     st.write("Conversion:")
 
     compras['time'] = compras['time'].astype(str).apply('{:0>4}'.format)
@@ -566,8 +562,28 @@ def runTest(dfNew, dfOld):
             dfOld = dfOld.loc[dfOld['tran-cde'].isin(optionTX) ]
             dfNew = dfNew.loc[dfNew['tran-cde'].isin(optionTX) ]
     st.markdown('##')
-    st.markdown('____')
 
+
+    st.write("Formula del Calculo del ratio:")
+    #st.latex(r'''
+    #    x/(x+y) = \begin{cases}
+    #    x: &\text{total transacciones aprobadas }  \\
+    #    y: &\text{total transacciones rechazadas } 
+    #    \end{cases}
+    #    ''')
+
+
+
+    st.latex(r'''
+    x/(x+y) = \begin{cases}
+    x: & \sum_ \text{ transacciones aprobadas} \    \\
+    y: & \sum_ \text{ transacciones rechazadas} \   
+    \end{cases}
+    ''')
+
+
+    st.markdown('##')
+    st.markdown('____')
 
     dfHeatOld = genRatio(dfOld, False)
     dfHeatOld = genRatioMatrix(dfHeatOld, False)
@@ -614,7 +630,7 @@ def runTest(dfNew, dfOld):
         threshold = -10
     else:
         #st.text('Reduzco la matriz eliminando valores muy bajos de variacion:')
-        optionals = st.beta_expander("Reduccion de matriz:", True)
+        optionals = st.beta_expander("Reducir por variacion de umbral:", True)
         threshold = optionals.slider( "Umbral (threshold)", float(-100), float(0), float(threshold) )
 
         dfConcatNeg = dfConcatNeg.applymap(f)

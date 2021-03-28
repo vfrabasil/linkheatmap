@@ -1,1 +1,1 @@
-web: sh setup.sh && streamlit run HeatmapStreamlit.py
+web: sh setup.sh && streamlit run HeatmapStreamlit.py --server.maxUploadSize=1028
