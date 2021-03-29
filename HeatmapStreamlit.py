@@ -76,7 +76,7 @@ def main():
         #dfNew.drop(dfNew.columns.difference(['term-fiid', 'term-typ', 'card-fiid', 'tran-cde', 'resp-cde']), 1, inplace=True)
  
         if stlit == True:
-            page = st.sidebar.selectbox("Seleccionar opcion", ['Exploracion', 'Analisis', 'Prediccion'])
+            page = st.sidebar.selectbox("Seleccionar opcion", ['Exploracion', 'Analisis', 'Serie Temporal'])
 
             st.markdown('##')
             if page == 'Analisis':
@@ -84,39 +84,55 @@ def main():
                 runTest(dfNew, dfOld)
 
             elif page == 'Exploracion':
-                st.title('2 - Datos exploratorios del Data-set: {}'.format("Post Implementacion"))
+                st.title('2 - Datos exploratorios:')
+
+                radioselx = st.radio("Seleccion Tabla:", ["PRE-implementacion", "POS-implementacion"] , key = 20)
+                if radioselx == "PRE-implementacion":
+                    dfSel = dfOld
+                if radioselx == "POS-implementacion":
+                    dfSel = dfNew
+                
+                st.markdown('##')
+                st.subheader(f"{radioselx}:")
 
                 muestra = 30
-                if st.checkbox('Muestra de los archivos cargados:'):
-                    st.subheader("PRE implementacion:")
-                    st.dataframe(dfOld.head(muestra))
-                    st.subheader("POS implementacion:")
-                    st.dataframe(dfNew.head(muestra))
+                if st.checkbox('Muestra Aleatoria'):
+                    st.dataframe(dfSel.sample(muestra))
                     st.markdown('##')
                 if st.checkbox('Descripcion:'):
-                    st.dataframe(dfNew.describe())
-                    st.dataframe(dfNew.describe(include=[object]))
+                    st.dataframe(dfSel.describe())
+                    st.dataframe(dfSel.describe(include=[object]))
                     st.markdown('##')
                 if st.checkbox("Cantidad de operaciones por Transaccion (tran-cde):"):
-                    txCant(dfNew)
+                    txCant(dfSel)
                     st.markdown('##')
                 if st.checkbox("Cantidad de operaciones por Terminal (term-cde):"):
-                    txTerm(dfNew)
+                    txTerm(dfSel)
                     st.markdown('##')
                 if st.checkbox("Tipo-tran por Transaccion:"):
-                    txTipoTran(dfNew)
+                    txTipoTran(dfSel)
                     st.markdown('##')
                 if st.checkbox("Transacciones (tran-cde) por FIID:"):
-                    txFiid(dfNew)
+                    txFiid(dfSel)
                     st.markdown('##')
                 if st.checkbox("Volumen de transacciones por FIID:"):
-                    txVolFiid(dfNew)
+                    txVolFiid(dfSel)
                     st.markdown('##')
 
                     
             else:
-                st.title('2 - Prediccion')
-                runPred(dfNew)
+                st.title('2 - Serie Temporal:')
+
+                radiosels = st.radio("Seleccion Tabla:", ["PRE-implementacion", "POS-implementacion"] , key = 30)
+                if radiosels == "PRE-implementacion":
+                    dfSer = dfOld
+                if radiosels == "POS-implementacion":
+                    dfSer = dfNew
+                
+                st.markdown('##')
+                st.subheader(f"{radiosels}:")
+
+                runPred(dfSer)
 
         else:
             runTest(dfNew, dfOld)
@@ -476,7 +492,7 @@ def generateHeatmapNegReduc(dfConcatNeg, heatTit):
 def runPred(dfNew):
 
     with st.beta_expander("Seleccionar transaccion :", expanded=False):
-        optionTX = st.selectbox("", options=dfNew['tran-cde'].unique() )
+        optionTX = st.selectbox("", options= sorted(dfNew['tran-cde'].unique()) )
         if len(optionTX) > 0:
             dfNew = dfNew.loc[dfNew['tran-cde'] == optionTX ]
 
@@ -536,7 +552,7 @@ def runPred(dfNew):
 
 def download_csv(name, df):
     #csv = df.to_csv(index=False)
-    csv = df.to_csv()
+    csv = df.to_csv(sep=";")
     base = base64.b64encode(csv.encode()).decode()
     file = (f'<a href="data:file/csv;base64,{base}" download="%s.csv">Download file</a>' % (name))
     return file
@@ -630,13 +646,13 @@ def runTest(dfNew, dfOld):
         threshold = -10
     else:
         #st.text('Reduzco la matriz eliminando valores muy bajos de variacion:')
-        optionals = st.beta_expander("Reducir por variacion de umbral:", True)
+        optionals = st.beta_expander("Reducir por nivel de tolerancia:", True)
         threshold = optionals.slider( "Umbral (threshold)", float(-100), float(0), float(threshold) )
 
         dfConcatNeg = dfConcatNeg.applymap(f)
         dfConcatNeg = dfConcatNeg.dropna(how='all')
         dfConcatNeg = dfConcatNeg.dropna(axis=1, how='all')
-        st.write(f"Tamaño de la matriz con umbral de  {threshold}: {dfConcatNeg.shape}")
+        st.write(f"Tamaño de la matriz con tolerancia de  {threshold}: {dfConcatNeg.shape}")
 
 
 
