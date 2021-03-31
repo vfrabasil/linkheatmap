@@ -29,11 +29,10 @@ stlit = True
 
 
 # Setting Cache for dataset:
-@st.cache(allow_output_mutation=True)
+@st.cache(allow_output_mutation=True, suppress_st_warning=True)
 def load_dataset(pre_file ,post_file):
     #dfOld = pd.read_csv('rcardOld.csv', sep=';')
     #dfNew = pd.read_csv('rcardNew.csv', sep=';')
-
     dfOld = pd.read_csv(pre_file, sep=';', dtype={"term-fiid": str, "term-typ": str, "card-fiid": str, "resp-cde": str}, low_memory=False)
     dfNew = pd.read_csv(post_file, sep=';', dtype={"term-fiid": str, "term-typ": str, "card-fiid": str, "resp-cde": str}, low_memory=False)
     return dfOld, dfNew
@@ -304,7 +303,7 @@ def txCant(dfNew):
     
 
 
-def genRatio(dfRatio, debug = False):
+def genRatio(dfRatio, radioselr):
     """ Generar un nuevo DF reducido con la columna de ratios de aprobacion: """
 
     #dfRatio = df[['term-fiid', 'term-typ', 'tran-cde', 'resp-cde']]
@@ -336,7 +335,23 @@ def genRatio(dfRatio, debug = False):
     def calRatio(fila):
         resultado = fila["aprobadas"]/( fila["aprobadas"] + fila["rechazadas"] )
         return resultado
-    dfRatio['ratio'] = dfRatio.apply(calRatio, axis = 1)
+
+    # Creo una nueva columna calculando el ratio = aprob
+    def calRatioV(fila):
+        resultado = fila["aprobadas"]
+        return resultado
+
+    def calRatioLN(fila):
+        resultado = np.log(fila["aprobadas"]+1)
+        return resultado
+
+
+    if radioselr == "Porcentual":
+        dfRatio['ratio'] = dfRatio.apply(calRatio, axis = 1)
+    if radioselr == "Volumen":
+        dfRatio['ratio'] = dfRatio.apply(calRatioV, axis = 1)
+    if radioselr == "VolumenLN":
+        dfRatio['ratio'] = dfRatio.apply(calRatioLN, axis = 1)
 
     return dfRatio
 
@@ -389,10 +404,43 @@ def generateHeatmap(dfRatios, heatTit):
 
 
 
+
+@st.cache(allow_output_mutation=True, suppress_st_warning=True)
+def calRatios(dfOld, dfNew, radioselr):
+
+    dfHeatOld = genRatio(dfOld, radioselr)
+    dfHeatOld = genRatioMatrix(dfHeatOld, False)
+    dfHeatOld = dfHeatOld.T
+    #generateHeatmap(dfHeatOld, "Ratio PRE-Imple")
+    #st.markdown(download_csv('Data Frame PREVIO',dfHeatOld),unsafe_allow_html=True)
+    #st.markdown('##')
+    #st.markdown('____')
+
+    dfHeatNew = genRatio(dfNew, radioselr)
+    dfHeatNew = genRatioMatrix(dfHeatNew, False)
+    dfHeatNew = dfHeatNew.T
+    #generateHeatmap(dfHeatNew, "Ratio POS-Imple")
+    #st.markdown(download_csv('Data Frame POSTERIOR',dfHeatNew),unsafe_allow_html=True)
+    #st.markdown('##')
+    #st.markdown('____')
+
+    return dfHeatOld, dfHeatNew
+
+
+
+@st.cache(allow_output_mutation=True, suppress_st_warning=True)
+def calDifHeatmap(dfHeatNew, dfHeatOld, radioselr):
+    dfConcat = dfHeatNew.append((dfHeatOld*(-1)), sort=False).copy()
+    dfConcat = dfConcat.groupby(dfConcat.index).sum()
+    if radioselr == "Porcentual":
+        dfConcat *= 100
+    return dfConcat
+
+
 def generateDifHeatmap(dfRatios, heatTit):
     """ HEATMAP por diferencia entre dia previo y posterior: """
 
-    dfRatios *=100
+    #dfRatios *=100
     if stlit == False:
         #new_df4 = new_df3.copy()
         #new_df3 *= 100
@@ -422,6 +470,18 @@ def generateDifHeatmap(dfRatios, heatTit):
         plt.ylabel("TermTyp por FIID") 
         st.pyplot(fig2)
         st.write(f'Tamaño matriz X:{xx} Y:{yy}')
+        st.markdown(download_csv('Data Frame VARIACION',dfRatios),unsafe_allow_html=True)
+
+
+@st.cache(allow_output_mutation=True, suppress_st_warning=True)
+def calHeatmapNeg(dfConcat):
+    """ HEATMAP por variacion negativa: """
+
+    f = lambda x:  float("NaN") if x > 0.0 else x
+    dfConcat = dfConcat.copy()
+    dfConcat = dfConcat.applymap(f)
+
+
 
 def generateHeatmapNeg(dfConcatNeg, heatTit):
     """ HEATMAP por variacion negativa: """
@@ -451,14 +511,35 @@ def generateHeatmapNeg(dfConcatNeg, heatTit):
         plt.ylabel("TermTyp por FIID") 
         st.pyplot(fig3)
         st.write(f'Tamaño matriz X:{xx} Y:{yy}')
-        
+
+        st.markdown(download_csv('Data Frame VARIACION NEG',dfConcatNeg),unsafe_allow_html=True)
         # g = sns.heatmap(dfConcatNeg)
         # g.set_title(heatTit)
         # st.write(g)
 
 
+
+@st.cache(allow_output_mutation=True, suppress_st_warning=True)
+def calHeatmapNegReduc(dfConcatNeg, threshold):
+    """ HEATMAP por variacion negativa reducido: """
+    f = lambda x:  float("NaN") if x > threshold else x
+
+    #print("Tamaño original: {}".format(dfConcatNeg.shape ) )
+    dfConcatNeg = dfConcatNeg.applymap(f)
+    dfConcatNeg = dfConcatNeg.dropna(how='all')
+    dfConcatNeg = dfConcatNeg.dropna(axis=1, how='all')
+    return dfConcatNeg
+
+
+
 def generateHeatmapNegReduc(dfConcatNeg, heatTit):
     """ HEATMAP por variacion negativa reducido: """
+    #f = lambda x:  float("NaN") if x > threshold else x
+    ##print("Tamaño original: {}".format(dfConcatNeg.shape ) )
+    #dfConcatNeg = dfConcatNeg.applymap(f)
+    #dfConcatNeg = dfConcatNeg.dropna(how='all')
+    #dfConcatNeg = dfConcatNeg.dropna(axis=1, how='all')
+    ##print("Tamaño despues de aplicar el umbral: {}".format(dfConcatNeg.shape ) )
 
     if stlit == False:
         g = sns.heatmap(dfConcatNeg, linewidths=.5, xticklabels=True, yticklabels=True)
@@ -484,7 +565,7 @@ def generateHeatmapNegReduc(dfConcatNeg, heatTit):
         plt.ylabel("TermTyp por FIID") 
 
         st.pyplot(fig4)
-        st.write(f'Tamaño matriz X:{xx} Y:{yy}')
+        #st.write(f'Tamaño matriz X:{xx} Y:{yy}')
 
 
 
@@ -561,6 +642,8 @@ def download_csv(name, df):
 
 def runTest(dfNew, dfOld):
 
+    f = lambda x:  float("NaN") if x > threshold else x
+
 
     with st.beta_expander("Reducir Matriz :", expanded=False):
         optionFIID = st.multiselect("Por FIID", dfNew['term-fiid'].unique() )
@@ -580,91 +663,78 @@ def runTest(dfNew, dfOld):
     st.markdown('##')
 
 
+    # 0- Formula del ratio en LATEX:
     st.write("Formula del Calculo del ratio:")
-    #st.latex(r'''
-    #    x/(x+y) = \begin{cases}
-    #    x: &\text{total transacciones aprobadas }  \\
-    #    y: &\text{total transacciones rechazadas } 
-    #    \end{cases}
-    #    ''')
-
-
-
-    st.latex(r'''
-    x/(x+y) = \begin{cases}
-    x: & \sum_ \text{ transacciones aprobadas} \    \\
-    y: & \sum_ \text{ transacciones rechazadas} \   
-    \end{cases}
-    ''')
-
-
+    radioselr = st.radio("Tipo de ratio:", ["Porcentual", "Volumen", "VolumenLN"], key="30" )
+    if radioselr == "Porcentual":
+        st.latex(r'''
+        \rho = x / (x+y)   :   \begin{cases}
+        x: & \sum_ \text{ transacciones aprobadas} \    \\
+        y: & \sum_ \text{ transacciones rechazadas} \   
+        \end{cases}
+        ''')
+    if radioselr == "Volumen":
+        st.latex(r''' \rho = \sum_{}^{} \text{ transacciones aprobadas} ''')
+    if radioselr == "VolumenLN":
+        st.latex(r''' \rho = \ln \lparen \sum_{}^{} \text{ transacciones aprobadas} + 1 \rparen''')
     st.markdown('##')
     st.markdown('____')
 
-    dfHeatOld = genRatio(dfOld, False)
-    dfHeatOld = genRatioMatrix(dfHeatOld, False)
-    dfHeatOld = dfHeatOld.T
-    generateHeatmap(dfHeatOld, "Ratio aprobacion (aprob/total) PRE-Imple")
+    # 1- Calculo del ratio:
+    dfHeatOld, dfHeatNew = calRatios(dfOld, dfNew, radioselr )
+    st.subheader('Ratios PRE implementacion:')
+    generateHeatmap(dfHeatOld, "Ratio PRE-Imple")
     st.markdown(download_csv('Data Frame PREVIO',dfHeatOld),unsafe_allow_html=True)
     st.markdown('##')
     st.markdown('____')
-
-    dfHeatNew = genRatio(dfNew, False)
-    dfHeatNew = genRatioMatrix(dfHeatNew, False)
-    dfHeatNew = dfHeatNew.T
-    generateHeatmap(dfHeatNew, "Ratio aprobacion (aprob/total) POS-Imple")
+    st.subheader('Ratios POS implementacion:')
+    generateHeatmap(dfHeatNew, "Ratio POS-Imple")
     st.markdown(download_csv('Data Frame POSTERIOR',dfHeatNew),unsafe_allow_html=True)
     st.markdown('##')
     st.markdown('____')
+    
 
-
-    dfConcat = dfHeatNew.append((dfHeatOld*(-1)), sort=False)
-    dfConcat = dfConcat.groupby(dfConcat.index).sum()
+    # 2- Calculo matriz de diferencias:
+    st.subheader('Variacion de ratios:')
+    dfConcat = calDifHeatmap(dfHeatNew, dfHeatOld, radioselr )
     generateDifHeatmap(dfConcat, "Variacion en ratios de aprobacion (TermTyp vs TranCde)")
-    st.markdown(download_csv('Data Frame VARIACION',dfConcat),unsafe_allow_html=True)
     st.markdown('##')
     st.markdown('____')
 
+
+    # 3- Calculo diferencias negativas:
     # Para este analisis elimino todos los valores positivos
     # ya que solo me interesa ver que transacciones disminuyeron en aprobaciones:
-    f = lambda x:  float("NaN") if x > 0.0 else x
-    dfConcatNeg = dfConcat.copy()
-    dfConcatNeg = dfConcatNeg.applymap(f)
-    generateHeatmapNeg(dfConcatNeg, "Variacion NEGATIVA en ratios de aprobacion")
-    st.markdown(download_csv('Data Frame VARIACION NEG',dfConcatNeg),unsafe_allow_html=True)
+    st.subheader('Variacion negativa de ratios:')
+    calHeatmapNeg(dfConcat)
+    generateHeatmapNeg(dfConcat, "Variacion NEGATIVA en ratios de aprobacion")
     st.markdown('##')
     st.markdown('____')
 
+
+    # 4- Calculo matriz negativa reducida:
     # Reduzco la matriz eliminando valores muy bajos de variacion
     # Hay una variacion de +/-X% en los ratios de aprobacion que es aceptable y no interesa analizar 
     # Por ejemplo si el dia anterior hubo 91% de aprobadas y el siguiente bajo a 89% (-2%), no lo analizo
     # A esa variable la denomino threshold:
-    f = lambda x:  float("NaN") if x > threshold else x
-
-    threshold = -10
+    threshold = min(dfConcat.min()) * 0.1
     if stlit == False:
         threshold = -10
     else:
-        #st.text('Reduzco la matriz eliminando valores muy bajos de variacion:')
-        optionals = st.beta_expander("Reducir por nivel de tolerancia:", True)
-        threshold = optionals.slider( "Umbral (threshold)", float(-100), float(0), float(threshold) )
-
-        dfConcatNeg = dfConcatNeg.applymap(f)
-        dfConcatNeg = dfConcatNeg.dropna(how='all')
-        dfConcatNeg = dfConcatNeg.dropna(axis=1, how='all')
-        st.write(f"Tamaño de la matriz con tolerancia de  {threshold}: {dfConcatNeg.shape}")
-
-
-
-    #print("Tamaño original: {}".format(dfConcatNeg.shape ) )
-    dfConcatNeg = dfConcatNeg.applymap(f)
-    dfConcatNeg = dfConcatNeg.dropna(how='all')
-    dfConcatNeg = dfConcatNeg.dropna(axis=1, how='all')
-    #print("Tamaño despues de aplicar el umbral: {}".format(dfConcatNeg.shape ) )
-
-    generateHeatmapNegReduc(dfConcatNeg, 'Variacion ( superior a {}% ) en ratios de aprobacion'.format(threshold) )
+        optionals = st.beta_expander("Reducir por nivel de tolerancia:", False)
+        threshold = optionals.slider( "Umbral (threshold)", float(min(dfConcat.min())), float(0), float(threshold) )
+        #dfConcatNeg = dfConcat.applymap(f)
+        #dfConcatNeg = dfConcatNeg.dropna(how='all')
+        #dfConcatNeg = dfConcatNeg.dropna(axis=1, how='all')
+        
+    st.subheader('Variacion negativa con tolerancia:')
+    dfConcatNeg = calHeatmapNegReduc(dfConcat, threshold )
+    generateHeatmapNegReduc(dfConcatNeg, 'Variacion NEGATIVA con nivel de tolerancia' )
+    st.write(f"Tamaño matriz: {dfConcatNeg.shape}  Tolerancia: {threshold}")
 
 
 
+# -----------------------------------------------------------------------------
 if __name__ == '__main__':
 	main()
+# -----------------------------------------------------------------------------
