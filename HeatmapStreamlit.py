@@ -16,10 +16,10 @@ from datetime import datetime
 #import plotly.express as px
 
 #Modo de Ejecucion:
-#streamlit run HeatmapStreamlit.py --server.maxUploadSize=1028
+# streamlit run HeatmapStreamlit.py --server.maxUploadSize=1028
 #
-#From Heroku
-#https://link-heatmap.herokuapp.com/
+#From Heroku:
+# https://link-heatmap.herokuapp.com/
 
 # Global parameters
 pd.set_option('display.max_columns', 100)
@@ -285,21 +285,26 @@ def txTerm(dfNew):
 def txCant(dfNew):
     df = dfNew.copy()
     counts = df['tran-cde'].value_counts().to_frame()
+    #counts = counts.reset_index()
     counts.rename(columns={'tran-cde': 'value_counts'}, inplace=True)
-    counts.index.name = 'tran-cde'
+    #counts.index.name = 'tran-cde'
+
 
     st.write("Tansacciones con mas operaciones:")
-    st.write(counts.head(10))
+    st.write(counts.head(15))
     st.write("Tansacciones con menos operaciones:")
-    st.write(counts.tail(10))
+    st.write(counts.tail(15))
 
-    counts.head(10).plot(kind = "bar")
+    counts.head(15).plot(kind = "bar")
     plt.xlabel("tran-cde")
     plt.ylabel("Cantidad de operaciones")
     plt.title("Cantidad de operaciones por transaccion (primeras 10)")
     st.pyplot(plt)
 
-
+    #fig1 = plt.figure()
+    #ax = sns.countplot(data=counts , x = 'value_counts' )
+    #plt.xticks(rotation=45)
+    #st.pyplot(fig1)
     
 
 
@@ -580,55 +585,88 @@ def runPred(dfNew):
 
     df = dfNew[['tran-cde', 'date', 'time', 'amt']].copy()
     compras = df.loc[df['tran-cde'] == optionTX]
+
+    compras['datetime'] = pd.to_datetime(2020*100000000 + df['date']* 10000  + df['time'] , format='%Y%m%d%H%M' )
+
     st.markdown('##')
     st.markdown('##')
     st.write("Muestra: Transaccion {}".format(optionTX))
-    st.write(compras.head(15))
-    st.write(compras.shape)
+    compras.set_index(['datetime'],inplace=True)
+
+    #st.write(compras.head(20))
+    #st.write(compras.tail(15))
+    #st.write(compras.shape)
+    #st.write(compras.dtypes)
     
 
     st.markdown('##')
     st.markdown('____')
-    st.write("Agrupado por HH:MM :")
-    #compras = compras.groupby('time')['amt'].sum().reset_index()
+    st.write("Modificar rango de la serie :")
+    
 
-    radiosel = st.radio("Tipo de agregacion:", ["Minimo", "Maximo", "Promedio", "Suma", "Cantidad"] )
-    if radiosel == "Minimo":
-        compras = compras.groupby('time')['amt'].min().reset_index()
-    if radiosel == "Maximo":
-        compras = compras.groupby('time')['amt'].max().reset_index()
-    if radiosel == "Promedio":
-        compras = compras.groupby('time')['amt'].mean().reset_index()
-    if radiosel == "Suma":
-        compras = compras.groupby('time')['amt'].sum().reset_index()
-    if radiosel == "Cantidad":
-        compras = compras.groupby('time')['amt'].count().reset_index()
 
-    #st.write(compras.head(15))
+    compras = compras[['amt']]
+    column_3, column_4 = st.beta_columns(2)
+    with column_3:
+        radioselag = st.radio("Rango de agrupacion:", ["1h", "30m", "15m", "5m", "1m"], key="40")
+        if radioselag == "1h":
+            rango = "H"
+        if radioselag == "30m":
+            rango = "30min"
+        if radioselag == "15m":
+            rango = "15min"
+        if radioselag == "5m":
+            rango = "5min"
+        if radioselag == "1m":
+            rango = "1min"
+    with column_4:
+        radiosel = st.radio("Tipo de agregacion:", ["Minimo", "Maximo", "Promedio", "Suma", "Cantidad"], key="50" )
+        if radiosel == "Minimo":
+            compras = compras.amt.resample(rango).min()
+        if radiosel == "Maximo":
+            compras = compras.amt.resample(rango).max()
+        if radiosel == "Promedio":
+            compras = compras.amt.resample(rango).mean()
+        if radiosel == "Suma":
+            compras = compras.amt.resample(rango).sum()
+        if radiosel == "Cantidad":
+            compras = compras.amt.resample(rango).count()
+    st.markdown('____')
+
+    #if radiosel == "Minimo":
+    #    compras = compras.groupby('time')['amt'].min().reset_index()
+    #if radiosel == "Maximo":
+    #    compras = compras.groupby('time')['amt'].max().reset_index()
+    #if radiosel == "Promedio":
+    #    compras = compras.groupby('time')['amt'].mean().reset_index()
+    #if radiosel == "Suma":
+    #    compras = compras.groupby('time')['amt'].sum().reset_index()
+    #if radiosel == "Cantidad":
+    #    compras = compras.groupby('time')['amt'].count().reset_index()
+
+    #compras = compras[['amt']]
+
     st.markdown('##')
     st.write("Conversion:")
 
-    compras['time'] = compras['time'].astype(str).apply('{:0>4}'.format)
-    f = lambda x:  x[:2] + ':' + x[2:]
-    compras['dtime'] = compras['time'].apply(f)  
-
-    tsCompras = compras[['dtime','amt']]
-    tsCompras = tsCompras.set_index('dtime')
-
-
+    #compras['time'] = compras['time'].astype(str).apply('{:0>4}'.format)
+    #f = lambda x:  x[:2] + ':' + x[2:]
+    #compras['dtime'] = compras['time'].apply(f)  
+    #tsCompras = compras[['dtime','amt']]
+    #tsCompras = tsCompras.set_index('dtime')
+    
+    #tsCompras = compras[['datetime','amt']]
+    #tsCompras = tsCompras.set_index('datetime')
 
     column_1, column_2 = st.beta_columns(2)
-
     with column_1:
-        st.write(tsCompras)
-        st.write(tsCompras.shape)
-
+        st.write(compras)
     with column_2:
-        tsCompras.plot(kind = "bar")
+        compras.plot()
         st.pyplot(plt)
 
     st.markdown('##')
-    st.line_chart(tsCompras['amt'])
+    st.line_chart(compras)
 
 
 def download_csv(name, df):
@@ -665,7 +703,7 @@ def runTest(dfNew, dfOld):
 
     # 0- Formula del ratio en LATEX:
     st.write("Formula del Calculo del ratio:")
-    radioselr = st.radio("Tipo de ratio:", ["Porcentual", "Volumen", "VolumenLN"], key="30" )
+    radioselr = st.radio("Tipo de ratio:", ["Porcentual", "Volumen", "VolumenLN"], key="40" )
     if radioselr == "Porcentual":
         st.latex(r'''
         \rho = x / (x+y)   :   \begin{cases}
@@ -726,7 +764,10 @@ def runTest(dfNew, dfOld):
         #dfConcatNeg = dfConcat.applymap(f)
         #dfConcatNeg = dfConcatNeg.dropna(how='all')
         #dfConcatNeg = dfConcatNeg.dropna(axis=1, how='all')
-        
+
+
+    st.markdown('##')
+    st.markdown('##')
     st.subheader('Variacion negativa con tolerancia:')
     dfConcatNeg = calHeatmapNegReduc(dfConcat, threshold )
     generateHeatmapNegReduc(dfConcatNeg, 'Variacion NEGATIVA con nivel de tolerancia' )
