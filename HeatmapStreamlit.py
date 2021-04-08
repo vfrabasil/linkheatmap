@@ -350,6 +350,11 @@ def genRatio(dfRatio, radioselr):
         resultado = np.log(fila["aprobadas"]+1)
         return resultado
 
+    def calRatioVAR(fila):
+        rho = fila["aprobadas"]/( fila["aprobadas"] + fila["rechazadas"] )
+        resultado = rho*(1-rho)*100
+        return resultado
+
 
     if radioselr == "Porcentual":
         dfRatio['ratio'] = dfRatio.apply(calRatio, axis = 1)
@@ -357,6 +362,8 @@ def genRatio(dfRatio, radioselr):
         dfRatio['ratio'] = dfRatio.apply(calRatioV, axis = 1)
     if radioselr == "VolumenLN":
         dfRatio['ratio'] = dfRatio.apply(calRatioLN, axis = 1)
+    if radioselr == "Varianza":
+        dfRatio['ratio'] = dfRatio.apply(calRatioVAR, axis = 1)
 
     return dfRatio
 
@@ -376,12 +383,12 @@ def genRatioMatrix(df, eda):
 def generateHeatmap(dfRatios, heatTit):
     """ HEATMAP diario: """
 
+
     df = dfRatios.fillna(-1).copy()
     if stlit == False:
         plt.pcolor(df)
         plt.yticks(np.arange(0.5, len(df.index), 1), df.index)
         plt.xticks(np.arange(0.5, len(df.columns), 1), df.columns)
-
        
         g = sns.heatmap(df, linewidths=.3, xticklabels=True, yticklabels=True, cmap='YlGnBu_r',
                             cbar_kws={'label': ' sin datos ( < 0)     |     %Aprob ( >= 0) '} )
@@ -430,6 +437,7 @@ def calRatios(dfOld, dfNew, radioselr):
     #st.markdown('____')
 
     return dfHeatOld, dfHeatNew
+
 
 
 
@@ -483,8 +491,9 @@ def calHeatmapNeg(dfConcat):
     """ HEATMAP por variacion negativa: """
 
     f = lambda x:  float("NaN") if x > 0.0 else x
-    dfConcat = dfConcat.copy()
-    dfConcat = dfConcat.applymap(f)
+    #dfConcat = dfConcat.copy()
+    #dfConcat = dfConcat.applymap(f)
+    dfConcat[dfConcat > 0.0] = 0.0
 
 
 
@@ -571,7 +580,6 @@ def generateHeatmapNegReduc(dfConcatNeg, heatTit):
 
         st.pyplot(fig4)
         #st.write(f'Tamaño matriz X:{xx} Y:{yy}')
-
 
 
 
@@ -703,7 +711,7 @@ def runTest(dfNew, dfOld):
 
     # 0- Formula del ratio en LATEX:
     st.write("Formula del Calculo del ratio:")
-    radioselr = st.radio("Tipo de ratio:", ["Porcentual", "Volumen", "VolumenLN"], key="40" )
+    radioselr = st.radio("Tipo de ratio:", ["Porcentual", "Volumen", "VolumenLN", "Varianza"], key="40" )
     if radioselr == "Porcentual":
         st.latex(r'''
         \rho = x / (x+y)   :   \begin{cases}
@@ -715,6 +723,10 @@ def runTest(dfNew, dfOld):
         st.latex(r''' \rho = \sum_{}^{} \text{ transacciones aprobadas} ''')
     if radioselr == "VolumenLN":
         st.latex(r''' \rho = \ln \lparen \sum_{}^{} \text{ transacciones aprobadas} + 1 \rparen''')
+    if radioselr == "Varianza":
+        st.latex(r''' var(x) = \lparen \rho * (1 - \rho) \rparen''')
+
+
     st.markdown('##')
     st.markdown('____')
 
