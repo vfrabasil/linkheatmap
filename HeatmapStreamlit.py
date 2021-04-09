@@ -1,5 +1,6 @@
-from typing import Optional
+#from typing import Optional
 import numpy as np
+#from numpy.core.numeric import False_
 import pandas as pd
 import matplotlib.pyplot as plt
 import plotly.express as px
@@ -8,9 +9,14 @@ import seaborn as sns
 import streamlit as st
 import base64
 import math
+import time
+import threading
+import queue
 
-from time import mktime
-from datetime import datetime
+#from datetime import datetime
+from streamlit.report_thread import add_report_ctx
+
+
 
 
 #import plotly.express as px
@@ -308,7 +314,7 @@ def txCant(dfNew):
     
 
 
-def genRatio(dfRatio, radioselr):
+def genRatio(dfRatio, radioselr, q):
     """ Generar un nuevo DF reducido con la columna de ratios de aprobacion: """
 
     #dfRatio = df[['term-fiid', 'term-typ', 'tran-cde', 'resp-cde']]
@@ -365,25 +371,42 @@ def genRatio(dfRatio, radioselr):
     if radioselr == "Varianza":
         dfRatio['ratio'] = dfRatio.apply(calRatioVAR, axis = 1)
 
-    return dfRatio
+    #return dfRatio
+    q.put(dfRatio)
 
 
 
-def genRatioMatrix(df, eda):
+def genRatioMatrix(df, eda, q):
     """ HEATMAP por transaccion (terminal FIID + Term Typ vs Codigo de transacion) """
+
+    t0= time.time()
 
     #Pivoteo tabla dejando el ratio como valor en la matriz de terminal vs tran-cde:
     dfRatios = df[['terminal', 'tran-cde', 'ratio']]
+
+    #opcion 1:
     dfRatios = dfRatios.pivot_table(index=['terminal'], columns='tran-cde', values='ratio')
+    
+    #opcion 2:
+    #grouping_columns = ['terminal', 'tran-cde']
+    #columns_to_show = ['ratio']
+    #dfRatios = dfRatios.groupby(by=grouping_columns)[columns_to_show].max().unstack()
+
+    t1 = time.time()
+    st.write(f'process time genRatioMatrix: {t1 - t0}')
+
     if (eda == True):
         print(dfRatios.head(10))
-    return dfRatios
+
+    dfRatios = dfRatios.T
+    #return dfRatios
+    q.put(dfRatios)
 
 
 def generateHeatmap(dfRatios, heatTit):
     """ HEATMAP diario: """
 
-
+    t0 = time.time()
     df = dfRatios.fillna(-1).copy()
     if stlit == False:
         plt.pcolor(df)
@@ -402,35 +425,72 @@ def generateHeatmap(dfRatios, heatTit):
         #fig1 = plt.figure(figsize=(16,5))
         fig1 = plt.figure()
         ax = plt.axes()
-
         xx = len(df.columns)
         yy = len(df)
         fig_dims = (math.ceil(xx/3), math.ceil(yy/5))
         fig1, ax = plt.subplots(figsize=fig_dims)
-
         sns.heatmap(df, linewidths=.3, xticklabels=True, yticklabels=True, cmap='YlGnBu_r',
                     cbar_kws={'label': ' sin datos ( < 0)     |     %Aprob ( >= 0) '}, ax = ax )
         ax.set_title(heatTit)
         st.pyplot(fig1)
-        st.write(f'Tamaño matriz X:{xx} Y:{yy}')
 
+        t1 = time.time()
+        st.write(f'Tamaño matriz X:{xx} Y:{yy} - Tiempo: {t1 - t0:.5f}s')
+
+        # Construct 2D histogram from data using the 'plasma' colormap
+        #plt.hist2d(x, y,  cmap='plasma')
+        #cb = plt.colorbar()
+        #cb.set_label('Number of entries')
+        #plt.title('Heatmap of 2D normally distributed data points')
+        #plt.xlabel('x axis')
+        #plt.ylabel('y axis')
+        #plt.show()
 
 
 
 @st.cache(allow_output_mutation=True, suppress_st_warning=True)
 def calRatios(dfOld, dfNew, radioselr):
 
-    dfHeatOld = genRatio(dfOld, radioselr)
-    dfHeatOld = genRatioMatrix(dfHeatOld, False)
-    dfHeatOld = dfHeatOld.T
+    # creating thread
+    q1 = queue.Queue()
+    q2 = queue.Queue()
+    t1 = threading.Thread(target=genRatio, args=(dfOld, radioselr, q1))
+    t2 = threading.Thread(target=genRatio, args=(dfNew, radioselr, q2))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+    dfHeatOld = q1.get()
+    dfHeatNew = q2.get()
+
+
+    t1 = threading.Thread(target=genRatioMatrix, args=(dfHeatOld, False, q1))
+    t2 = threading.Thread(target=genRatioMatrix, args=(dfHeatNew, False, q2))
+    add_report_ctx(t1)
+    add_report_ctx(t2)
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+    dfHeatOld = q1.get()
+    dfHeatNew = q2.get()
+
+
+    #opcion 2
+    #dfHeatOld = genRatio(dfOld, radioselr)
+    #dfHeatOld = genRatioMatrix(dfHeatOld, False)
+    #dfHeatOld = dfHeatOld.T
+
     #generateHeatmap(dfHeatOld, "Ratio PRE-Imple")
     #st.markdown(download_csv('Data Frame PREVIO',dfHeatOld),unsafe_allow_html=True)
     #st.markdown('##')
     #st.markdown('____')
 
-    dfHeatNew = genRatio(dfNew, radioselr)
-    dfHeatNew = genRatioMatrix(dfHeatNew, False)
-    dfHeatNew = dfHeatNew.T
+    #opcion 2
+    #dfHeatNew = genRatio(dfNew, radioselr)
+    #dfHeatNew = genRatioMatrix(dfHeatNew, False)
+    #dfHeatNew = dfHeatNew.T
+
     #generateHeatmap(dfHeatNew, "Ratio POS-Imple")
     #st.markdown(download_csv('Data Frame POSTERIOR',dfHeatNew),unsafe_allow_html=True)
     #st.markdown('##')
@@ -454,6 +514,7 @@ def generateDifHeatmap(dfRatios, heatTit):
     """ HEATMAP por diferencia entre dia previo y posterior: """
 
     #dfRatios *=100
+    t0 = time.time()
     if stlit == False:
         #new_df4 = new_df3.copy()
         #new_df3 *= 100
@@ -482,7 +543,9 @@ def generateDifHeatmap(dfRatios, heatTit):
         plt.xlabel("TranCode") 
         plt.ylabel("TermTyp por FIID") 
         st.pyplot(fig2)
-        st.write(f'Tamaño matriz X:{xx} Y:{yy}')
+        t1 = time.time()
+        st.write(f'Tamaño matriz X:{xx} Y:{yy} - Tiempo: {t1 - t0:.5f}s')
+
         st.markdown(download_csv('Data Frame VARIACION',dfRatios),unsafe_allow_html=True)
 
 
@@ -490,16 +553,19 @@ def generateDifHeatmap(dfRatios, heatTit):
 def calHeatmapNeg(dfConcat):
     """ HEATMAP por variacion negativa: """
 
-    f = lambda x:  float("NaN") if x > 0.0 else x
+    #f = lambda x:  float("NaN") if x > 0.0 else x
     #dfConcat = dfConcat.copy()
     #dfConcat = dfConcat.applymap(f)
-    dfConcat[dfConcat > 0.0] = 0.0
+    dfNeg = dfConcat.copy()
+    dfNeg[dfNeg > 0.0] = 0.0
+    return dfNeg
 
 
 
 def generateHeatmapNeg(dfConcatNeg, heatTit):
     """ HEATMAP por variacion negativa: """
 
+    t0 = time.time()
     if stlit == False:
         g = sns.heatmap(dfConcatNeg, linewidths=.5, xticklabels=True, yticklabels=True)
         g.set_xticklabels(g.get_xticklabels(), rotation=75, fontsize=7)
@@ -524,7 +590,8 @@ def generateHeatmapNeg(dfConcatNeg, heatTit):
         plt.xlabel("TranCode") 
         plt.ylabel("TermTyp por FIID") 
         st.pyplot(fig3)
-        st.write(f'Tamaño matriz X:{xx} Y:{yy}')
+        t1 = time.time()
+        st.write(f'Tamaño matriz X:{xx} Y:{yy} - Tiempo: {t1 - t0:.5f}s')
 
         st.markdown(download_csv('Data Frame VARIACION NEG',dfConcatNeg),unsafe_allow_html=True)
         # g = sns.heatmap(dfConcatNeg)
@@ -725,18 +792,20 @@ def runTest(dfNew, dfOld):
         st.latex(r''' \rho = \ln \lparen \sum_{}^{} \text{ transacciones aprobadas} + 1 \rparen''')
     if radioselr == "Varianza":
         st.latex(r''' var(x) = \lparen \rho * (1 - \rho) \rparen''')
-
-
     st.markdown('##')
     st.markdown('____')
 
     # 1- Calculo del ratio:
     dfHeatOld, dfHeatNew = calRatios(dfOld, dfNew, radioselr )
     st.subheader('Ratios PRE implementacion:')
+
+    #if st.checkbox('ver HeatMap PRE-Imple', value=True):
     generateHeatmap(dfHeatOld, "Ratio PRE-Imple")
     st.markdown(download_csv('Data Frame PREVIO',dfHeatOld),unsafe_allow_html=True)
     st.markdown('##')
     st.markdown('____')
+
+    #if st.checkbox('ver HeatMap POS-Imple', value=True):
     st.subheader('Ratios POS implementacion:')
     generateHeatmap(dfHeatNew, "Ratio POS-Imple")
     st.markdown(download_csv('Data Frame POSTERIOR',dfHeatNew),unsafe_allow_html=True)
@@ -756,8 +825,8 @@ def runTest(dfNew, dfOld):
     # Para este analisis elimino todos los valores positivos
     # ya que solo me interesa ver que transacciones disminuyeron en aprobaciones:
     st.subheader('Variacion negativa de ratios:')
-    calHeatmapNeg(dfConcat)
-    generateHeatmapNeg(dfConcat, "Variacion NEGATIVA en ratios de aprobacion")
+    dfNeg = calHeatmapNeg(dfConcat)
+    generateHeatmapNeg(dfNeg, "Variacion NEGATIVA en ratios de aprobacion")
     st.markdown('##')
     st.markdown('____')
 
@@ -767,12 +836,12 @@ def runTest(dfNew, dfOld):
     # Hay una variacion de +/-X% en los ratios de aprobacion que es aceptable y no interesa analizar 
     # Por ejemplo si el dia anterior hubo 91% de aprobadas y el siguiente bajo a 89% (-2%), no lo analizo
     # A esa variable la denomino threshold:
-    threshold = min(dfConcat.min()) * 0.1
+    threshold = min(dfNeg.min()) * 0.1
     if stlit == False:
         threshold = -10
     else:
         optionals = st.beta_expander("Reducir por nivel de tolerancia:", False)
-        threshold = optionals.slider( "Umbral (threshold)", float(min(dfConcat.min())), float(0), float(threshold) )
+        threshold = optionals.slider( "Umbral (threshold)", float(min(dfNeg.min())), float(0), float(threshold) )
         #dfConcatNeg = dfConcat.applymap(f)
         #dfConcatNeg = dfConcatNeg.dropna(how='all')
         #dfConcatNeg = dfConcatNeg.dropna(axis=1, how='all')
@@ -781,9 +850,12 @@ def runTest(dfNew, dfOld):
     st.markdown('##')
     st.markdown('##')
     st.subheader('Variacion negativa con tolerancia:')
-    dfConcatNeg = calHeatmapNegReduc(dfConcat, threshold )
+    dfConcatNeg = calHeatmapNegReduc(dfNeg, threshold )
+    t0 = time.time()
     generateHeatmapNegReduc(dfConcatNeg, 'Variacion NEGATIVA con nivel de tolerancia' )
-    st.write(f"Tamaño matriz: {dfConcatNeg.shape}  Tolerancia: {threshold}")
+    t1 = time.time()
+    st.write(f"Tamaño matriz: {dfConcatNeg.shape} - Tolerancia: {threshold} - Tiempo: {t1 - t0:.5f}s")
+
 
 
 
