@@ -1,6 +1,4 @@
-#from typing import Optional
 import numpy as np
-#from numpy.core.numeric import False_
 import pandas as pd
 import matplotlib.pyplot as plt
 import plotly.express as px
@@ -13,19 +11,24 @@ import time
 import threading
 import queue
 
-#from datetime import datetime
 from streamlit.report_thread import add_report_ctx
 
-
-
-
 #import plotly.express as px
+#import numba as nb
+#from typing import Optional
+#from datetime import datetime
+#from numpy.core.numeric import False_
+
+
+
 
 #Modo de Ejecucion:
 # streamlit run HeatmapStreamlit.py --server.maxUploadSize=1028
 #
 #From Heroku:
 # https://link-heatmap.herokuapp.com/
+
+
 
 # Global parameters
 pd.set_option('display.max_columns', 100)
@@ -612,7 +615,9 @@ def calHeatmapNegReduc(dfConcatNeg, threshold):
     return dfConcatNeg
 
 
-
+#@cuda.jit
+#@jit
+#@nb.njit(fastmath=True,error_model="numpy")
 def generateHeatmapNegReduc(dfConcatNeg, heatTit):
     """ HEATMAP por variacion negativa reducido: """
     #f = lambda x:  float("NaN") if x > threshold else x
